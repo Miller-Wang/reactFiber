@@ -16,6 +16,7 @@ let element = (
     </div>
     <div id="B2" style={style}>
       B2
+      <button onClick={() => alert('点击事件')}>按钮</button>
     </div>
   </div>
 );

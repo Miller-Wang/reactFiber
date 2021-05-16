@@ -18,14 +18,25 @@ let deletions = []; //要删除的fiber节点
 
 // 暴露给外部
 export function scheduleRoot(rootFiber) {
-  if (currentRoot) {
-    // 更新
+  if (currentRoot && currentRoot.alternate) {
+    // 第一次之后的更新
+    // 双缓冲机制，复用之前的fiber对象
+    workInProgressRoot = currentRoot.alternate;
+    workInProgressRoot.alternate = currentRoot;
+    if (rootFiber) {
+      // 更新复用fiber节点的props
+      workInProgressRoot.props = rootFiber.props;
+    }
+  } else if (currentRoot) {
+    // 第一次更新
     rootFiber.alternate = currentRoot;
     workInProgressRoot = rootFiber;
   } else {
     workInProgressRoot = rootFiber;
   }
 
+  // 清除effect list
+  workInProgressRoot.firstEffect = workInProgressRoot.lastEffect = null;
   nextUnitOfWork = workInProgressRoot;
 }
 
@@ -216,6 +227,8 @@ function commitRoot() {
   }
   // 提交完成
   deletions.length = 0;
+  // 清除effect list
+  workInProgressRoot.firstEffect = workInProgressRoot.lastEffect = null;
   currentRoot = workInProgressRoot;
   workInProgressRoot = null;
 }

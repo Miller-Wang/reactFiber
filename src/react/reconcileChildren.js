@@ -35,16 +35,24 @@ export function reconcileChildren(currentFiber, newChildren, deletions) {
     // 类型相同就更新，不同就重新创建插入
     if (sameType) {
       // 更新
-      newFiber = {
-        tag: oldFiber.tag, //原生DOM组件
-        type: oldFiber.type, //具体的元素类型
-        props: newChild.props, //新的属性对象
-        stateNode: oldFiber.stateNode, //复用老fiber的dom
-        return: currentFiber, //父Fiber
-        alternate: oldFiber, //上一个Fiber 指向旧树中的节点
-        effectTag: UPDATE, //更新节点
-        nextEffect: null,
-      };
+      if (oldFiber.alternate) {
+        // 双缓冲机制，复用老的fiber
+        newFiber = oldFiber.alternate;
+        newFiber.props = newChild.props;
+        newFiber.alternate = oldFiber;
+        newFiber.effectTag = UPDATE;
+      } else {
+        newFiber = {
+          tag: oldFiber.tag, //原生DOM组件
+          type: oldFiber.type, //具体的元素类型
+          props: newChild.props, //新的属性对象
+          stateNode: oldFiber.stateNode, //复用老fiber的dom
+          return: currentFiber, //父Fiber
+          alternate: oldFiber, //上一个Fiber 指向旧树中的节点
+          effectTag: UPDATE, //更新节点
+          nextEffect: null,
+        };
+      }
     } else {
       // 新建
       if (newChild) {
