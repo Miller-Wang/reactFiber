@@ -10,7 +10,7 @@ import {
   TAG_FUNCTION_COMPONENT,
 } from './constants';
 import { reconcileChildren } from './reconcileChildren';
-import { UpdateQueue } from './UpdateQueue';
+import { UpdateQueue, Update } from './UpdateQueue';
 import { setProps } from './utils';
 
 let workInProgressRoot = null; //正在渲染中的根Fiber
@@ -18,6 +18,11 @@ let nextUnitOfWork = null; //下一个工作单元
 
 let currentRoot = null; //当前的根Fiber
 let deletions = []; //要删除的fiber节点
+
+let workInProgressFiber = null; // 正在工作中的fiber
+let hookIndex = 0; // hook索引
+
+requestIdleCallback(workLoop, { timeout: 500 });
 
 // 暴露给外部, 当类组件setState时 传入的rootFiber为空
 export function scheduleRoot(rootFiber) {
@@ -152,6 +157,10 @@ function updateClassComponent(currentFiber) {
 
 // 函数组件
 function updateFunctionComponent(currentFiber) {
+  workInProgressFiber = currentFiber;
+  hookIndex = 0;
+  workInProgressFiber.hooks = [];
+
   const newChildren = [currentFiber.type(currentFiber.props)];
   reconcileChildren(currentFiber, newChildren, deletions);
 }
@@ -253,7 +262,7 @@ function completeUnitOfWork(currentFiber) {
   }
 }
 
-// -----------commit阶段-----------
+// ----------------commit阶段----------------
 
 function commitRoot() {
   deletions.forEach(commitWork);
@@ -318,4 +327,36 @@ function commitDeletion(currentFiber, domReturn) {
   }
 }
 
-requestIdleCallback(workLoop, { timeout: 500 });
+// -------------------------------hooks--------------------------------------
+export function useReducer(reducer, initialValue) {
+  let oldHook =
+    workInProgressFiber.alternate &&
+    workInProgressFiber.alternate.hooks &&
+    workInProgressFiber.alternate.hooks[hookIndex];
+  let newHook = oldHook;
+  if (oldHook) {
+    newHook.state = oldHook.updateQueue.forceUpdate(oldHook.state);
+  } else {
+    newHook = {
+      state: initialValue,
+      updateQueue: new UpdateQueue(),
+    };
+  }
+  const dispatch = action => {
+    console.log('action', action);
+    if (typeof action === 'function') {
+      action = action(newHook.state);
+    }
+    const newState = reducer ? reducer(newHook.state, action) : action;
+    newHook.updateQueue.enqueueUpdate(new Update(newState));
+    scheduleRoot();
+  };
+
+  // 将hook的数据放在 fiber的hooks中，并让hookIndex指针后移
+  workInProgressFiber.hooks[hookIndex++] = newHook;
+  return [newHook.state, dispatch];
+}
+
+export function useState(initState) {
+  return useReducer(null, initState);
+}

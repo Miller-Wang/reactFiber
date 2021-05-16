@@ -15,6 +15,18 @@ let fiberNode = {
     nextEffect,
     lastEffect,
     effectTag, // 副作用类型 插入、更新、删除
+
+    alternate, // 旧的fiber节点
+    hooks, // 数组
 }
 
+```
+
+### hooks 数据结构
+
+```js
+hook = {
+  state, // 状态
+  updateQueue, //更新队列
+};
 ```
