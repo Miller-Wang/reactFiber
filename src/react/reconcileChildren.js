@@ -8,6 +8,7 @@ import {
   PLACEMENT,
   DELETION,
 } from './constants';
+import { UpdateQueue } from './UpdateQueue';
 
 /**
  * 创建fiber 构建fiber树
@@ -18,6 +19,8 @@ export function reconcileChildren(currentFiber, newChildren, deletions) {
   let newChildIndex = 0; //新虚拟DOM数组中的索引
   // 老的父fiber的第一个子fiber
   let oldFiber = currentFiber.alternate && currentFiber.alternate.child;
+  if (oldFiber) oldFiber.firstEffect = oldFiber.lastEffect = oldFiber.nextEffect = null;
+
   let prevSibling;
   while (newChildIndex < newChildren.length || oldFiber) {
     const newChild = newChildren[newChildIndex];
@@ -26,7 +29,15 @@ export function reconcileChildren(currentFiber, newChildren, deletions) {
     const sameType = oldFiber && newChild && newChild.type === oldFiber.type;
     let newFiber;
     let tag;
-    if (newChild && newChild.type === ELEMENT_TEXT) {
+
+    // class 会被编译成函数，所以用function判断， 用 isReactComponent来判断是否是类组件
+    if (
+      newChild &&
+      typeof newChild.type === 'function' &&
+      newChild.type.prototype.isReactComponent
+    ) {
+      tag = TAG_CLASS;
+    } else if (newChild && newChild.type === ELEMENT_TEXT) {
       tag = TAG_TEXT; //文本
     } else if (newChild && typeof newChild.type === 'string') {
       tag = TAG_HOST; //原生DOM组件
@@ -41,6 +52,7 @@ export function reconcileChildren(currentFiber, newChildren, deletions) {
         newFiber.props = newChild.props;
         newFiber.alternate = oldFiber;
         newFiber.effectTag = UPDATE;
+        newFiber.updateQueue = oldFiber.updateQueue || new UpdateQueue();
       } else {
         newFiber = {
           tag: oldFiber.tag, //原生DOM组件
@@ -50,7 +62,7 @@ export function reconcileChildren(currentFiber, newChildren, deletions) {
           return: currentFiber, //父Fiber
           alternate: oldFiber, //上一个Fiber 指向旧树中的节点
           effectTag: UPDATE, //更新节点
-          nextEffect: null,
+          updateQueue: oldFiber.updateQueue || new UpdateQueue(),
         };
       }
     } else {
@@ -64,6 +76,7 @@ export function reconcileChildren(currentFiber, newChildren, deletions) {
           stateNode: null, //stateNode肯定是空的
           return: currentFiber, //父Fiber
           effectTag: PLACEMENT, //插入节点
+          updateQueue: new UpdateQueue(),
         };
       }
       if (oldFiber) {

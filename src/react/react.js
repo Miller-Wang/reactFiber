@@ -1,4 +1,6 @@
 import { ELEMENT_TEXT } from './constants';
+import { scheduleRoot } from './scheduler';
+import { UpdateQueue, Update } from './UpdateQueue';
 
 /**
  * 创建虚拟Dom的方法
@@ -29,8 +31,22 @@ function createElement(type, config, ...children) {
   };
 }
 
+class Component {
+  constructor(props) {
+    this.props = props;
+  }
+
+  setState(payload) {
+    this.internalFiber.updateQueue.enqueueUpdate(new Update(payload));
+    scheduleRoot();
+  }
+}
+// 函数组件标识
+Component.prototype.isReactComponent = true;
+
 const React = {
   createElement,
+  Component,
 };
 
 export default React;

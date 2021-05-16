@@ -6,8 +6,10 @@ import {
   DELETION,
   UPDATE,
   ELEMENT_TEXT,
+  TAG_CLASS,
 } from './constants';
 import { reconcileChildren } from './reconcileChildren';
+import { UpdateQueue } from './UpdateQueue';
 import { setProps } from './utils';
 
 let workInProgressRoot = null; //正在渲染中的根Fiber
@@ -16,7 +18,7 @@ let nextUnitOfWork = null; //下一个工作单元
 let currentRoot = null; //当前的根Fiber
 let deletions = []; //要删除的fiber节点
 
-// 暴露给外部
+// 暴露给外部, 当类组件setState时 传入的rootFiber为空
 export function scheduleRoot(rootFiber) {
   if (currentRoot && currentRoot.alternate) {
     // 第一次之后的更新
@@ -29,8 +31,15 @@ export function scheduleRoot(rootFiber) {
     }
   } else if (currentRoot) {
     // 第一次更新
-    rootFiber.alternate = currentRoot;
-    workInProgressRoot = rootFiber;
+    if (rootFiber) {
+      rootFiber.alternate = currentRoot;
+      workInProgressRoot = rootFiber;
+    } else {
+      workInProgressRoot = {
+        ...currentRoot,
+        alternate: currentRoot,
+      };
+    }
   } else {
     workInProgressRoot = rootFiber;
   }
@@ -89,6 +98,9 @@ function beginWork(currentFiber) {
     case TAG_HOST:
       updateHost(currentFiber);
       break;
+    case TAG_CLASS:
+      updateClassComponent(currentFiber);
+      break;
     default:
       break;
   }
@@ -116,6 +128,21 @@ function updateHost(currentFiber) {
     currentFiber.stateNode = createDOM(currentFiber);
   }
   const newChildren = currentFiber.props.children;
+  reconcileChildren(currentFiber, newChildren, deletions);
+}
+
+// 类组件
+function updateClassComponent(currentFiber) {
+  if (!currentFiber.stateNode) {
+    currentFiber.stateNode = new currentFiber.type(currentFiber.props);
+    currentFiber.stateNode.internalFiber = currentFiber;
+    currentFiber.updateQueue = new UpdateQueue();
+  }
+
+  // 获取最新状态
+  currentFiber.stateNode.state = currentFiber.updateQueue.forceUpdate(currentFiber.stateNode.state);
+  // 重新渲染组件
+  const newChildren = [currentFiber.stateNode.render()];
   reconcileChildren(currentFiber, newChildren, deletions);
 }
 
@@ -236,14 +263,26 @@ function commitRoot() {
 function commitWork(currentFiber) {
   if (!currentFiber) return;
   let returnFiber = currentFiber.return;
+
+  // 类组件fiber 中的stateNode是类的实例，不是真实dom，需要往上查找到真实dom的节点
+  while (returnFiber.tag === TAG_CLASS) {
+    returnFiber = returnFiber.return;
+  }
+
   const domReturn = returnFiber.stateNode;
 
   if (currentFiber.effectTag === PLACEMENT && currentFiber.stateNode) {
+    // 类组件没有真实dom，需要往下查找
+    let nextFiber = currentFiber;
+    while (nextFiber.tag === TAG_CLASS) {
+      nextFiber = nextFiber.child;
+    }
+
     //如果是新增DOM节点
-    domReturn.appendChild(currentFiber.stateNode);
+    domReturn.appendChild(nextFiber.stateNode);
   } else if (currentFiber.effectTag === DELETION) {
     // 删除
-    domReturn.removeChild(currentFiber.stateNode);
+    commitDeletion(currentFiber, domReturn);
   } else if (currentFiber.effectTag === UPDATE && currentFiber.stateNode) {
     // 更新
     if (currentFiber.type === ELEMENT_TEXT) {
@@ -257,6 +296,16 @@ function commitWork(currentFiber) {
   }
 
   currentFiber.effectTag = null;
+}
+
+// 删除类组件dom
+function commitDeletion(currentFiber, domReturn) {
+  if (currentFiber.tag === TAG_CLASS) {
+    // 往下找
+    commitDeletion(currentFiber.child, domReturn);
+  } else {
+    domReturn.removeChild(currentFiber.stateNode);
+  }
 }
 
 requestIdleCallback(workLoop, { timeout: 500 });
