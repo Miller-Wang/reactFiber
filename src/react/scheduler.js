@@ -1,13 +1,31 @@
-import { TAG_HOST, TAG_ROOT, TAG_TEXT, PLACEMENT } from './constants';
+import {
+  TAG_HOST,
+  TAG_ROOT,
+  TAG_TEXT,
+  PLACEMENT,
+  DELETION,
+  UPDATE,
+  ELEMENT_TEXT,
+} from './constants';
 import { reconcileChildren } from './reconcileChildren';
 import { setProps } from './utils';
 
 let workInProgressRoot = null; //正在渲染中的根Fiber
 let nextUnitOfWork = null; //下一个工作单元
 
+let currentRoot = null; //当前的根Fiber
+let deletions = []; //要删除的fiber节点
+
 // 暴露给外部
 export function scheduleRoot(rootFiber) {
-  workInProgressRoot = rootFiber;
+  if (currentRoot) {
+    // 更新
+    rootFiber.alternate = currentRoot;
+    workInProgressRoot = rootFiber;
+  } else {
+    workInProgressRoot = rootFiber;
+  }
+
   nextUnitOfWork = workInProgressRoot;
 }
 
@@ -68,7 +86,7 @@ function beginWork(currentFiber) {
 // 根fiber， stateNode是外部传入的
 function updateHostRoot(currentFiber) {
   const newChildren = currentFiber.props.children;
-  reconcileChildren(currentFiber, newChildren);
+  reconcileChildren(currentFiber, newChildren, deletions);
 }
 
 // 文本类型
@@ -87,7 +105,7 @@ function updateHost(currentFiber) {
     currentFiber.stateNode = createDOM(currentFiber);
   }
   const newChildren = currentFiber.props.children;
-  reconcileChildren(currentFiber, newChildren);
+  reconcileChildren(currentFiber, newChildren, deletions);
 }
 
 // 创建真实dom
@@ -190,13 +208,15 @@ function completeUnitOfWork(currentFiber) {
 // -----------commit阶段-----------
 
 function commitRoot() {
+  deletions.forEach(commitWork);
   let currentFiber = workInProgressRoot.firstEffect;
-  console.log(workInProgressRoot.firstEffect);
   while (currentFiber) {
     commitWork(currentFiber);
     currentFiber = currentFiber.nextEffect;
   }
   // 提交完成
+  deletions.length = 0;
+  currentRoot = workInProgressRoot;
   workInProgressRoot = null;
 }
 
@@ -208,7 +228,21 @@ function commitWork(currentFiber) {
   if (currentFiber.effectTag === PLACEMENT && currentFiber.stateNode) {
     //如果是新增DOM节点
     domReturn.appendChild(currentFiber.stateNode);
+  } else if (currentFiber.effectTag === DELETION) {
+    // 删除
+    domReturn.removeChild(currentFiber.stateNode);
+  } else if (currentFiber.effectTag === UPDATE && currentFiber.stateNode) {
+    // 更新
+    if (currentFiber.type === ELEMENT_TEXT) {
+      if (currentFiber.alternate.props.text !== currentFiber.props.text) {
+        currentFiber.stateNode.textContent = currentFiber.props.text;
+      } else {
+        updateDOM(currentFiber.stateNode, currentFiber.alternate.props, currentFiber.props);
+      }
+    } else {
+    }
   }
+
   currentFiber.effectTag = null;
 }
 
