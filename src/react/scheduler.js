@@ -7,6 +7,7 @@ import {
   UPDATE,
   ELEMENT_TEXT,
   TAG_CLASS,
+  TAG_FUNCTION_COMPONENT,
 } from './constants';
 import { reconcileChildren } from './reconcileChildren';
 import { UpdateQueue } from './UpdateQueue';
@@ -101,6 +102,9 @@ function beginWork(currentFiber) {
     case TAG_CLASS:
       updateClassComponent(currentFiber);
       break;
+    case TAG_FUNCTION_COMPONENT:
+      updateFunctionComponent(currentFiber);
+      break;
     default:
       break;
   }
@@ -143,6 +147,12 @@ function updateClassComponent(currentFiber) {
   currentFiber.stateNode.state = currentFiber.updateQueue.forceUpdate(currentFiber.stateNode.state);
   // 重新渲染组件
   const newChildren = [currentFiber.stateNode.render()];
+  reconcileChildren(currentFiber, newChildren, deletions);
+}
+
+// 函数组件
+function updateFunctionComponent(currentFiber) {
+  const newChildren = [currentFiber.type(currentFiber.props)];
   reconcileChildren(currentFiber, newChildren, deletions);
 }
 
@@ -265,7 +275,7 @@ function commitWork(currentFiber) {
   let returnFiber = currentFiber.return;
 
   // 类组件fiber 中的stateNode是类的实例，不是真实dom，需要往上查找到真实dom的节点
-  while (returnFiber.tag === TAG_CLASS) {
+  while ([TAG_CLASS, TAG_FUNCTION_COMPONENT].includes(returnFiber.tag)) {
     returnFiber = returnFiber.return;
   }
 
@@ -274,7 +284,7 @@ function commitWork(currentFiber) {
   if (currentFiber.effectTag === PLACEMENT && currentFiber.stateNode) {
     // 类组件没有真实dom，需要往下查找
     let nextFiber = currentFiber;
-    while (nextFiber.tag === TAG_CLASS) {
+    while ([TAG_CLASS, TAG_FUNCTION_COMPONENT].includes(nextFiber.tag)) {
       nextFiber = nextFiber.child;
     }
 
@@ -300,7 +310,7 @@ function commitWork(currentFiber) {
 
 // 删除类组件dom
 function commitDeletion(currentFiber, domReturn) {
-  if (currentFiber.tag === TAG_CLASS) {
+  if ([TAG_CLASS, TAG_FUNCTION_COMPONENT].includes(currentFiber.tag)) {
     // 往下找
     commitDeletion(currentFiber.child, domReturn);
   } else {

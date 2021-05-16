@@ -1,6 +1,6 @@
 import { ELEMENT_TEXT } from './constants';
 import { scheduleRoot } from './scheduler';
-import { UpdateQueue, Update } from './UpdateQueue';
+import { Update } from './UpdateQueue';
 
 /**
  * 创建虚拟Dom的方法
